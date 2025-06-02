@@ -3,7 +3,7 @@
 import User from '../models/User.js';
 
 export const getProfile = async (req, res) => {
-  // 1) Ensure the user is authenticated
+  // #swagger.tags = ['User']
   if (!req.user) {
     return res.status(401).json({ message: 'User not authenticated' });
   }

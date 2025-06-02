@@ -8,99 +8,132 @@ import resetPasswordEmailTemplate from '../utils/emailTemplates/resetPasswordEma
 
 
 export const registerUser = async (req, res, next) => {
-    try {
-        const { fullName, email, password, phone } = req.body;
-
-        const existingUser = await User.findOne({ email });
-        if (existingUser) return res.status(400).json({ message: 'User already exists' });
-
-        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=2a7cf6&color=ffffff&size=256`;
-
-        const user = await User.create({ fullName, email, password, phone, avatarUrl });
-
-        const activationToken = generateActivationToken(user);
-        const activationLink = `${req.protocol}://${req.get('host')}/api/auth/verify/${activationToken}`;
-
-        await sendEmail(
-            user.email,
-            'Verify Your Account',
-            activationEmail(user.fullName, activationLink)
-        );
-
-        res.status(201).json({
-            message: 'Registration successful. Please check your email to verify your account.',
-        });
-    } catch (err) {
-        next(err);
+  // #swagger.tags = ['Auth']
+  /* #swagger.parameters['body'] = {
+    in: 'body',
+    description: 'User registration data',
+    schema: 
+    {
+      fullName: 'string',
+      email: 'string',
+      password: 'string',
+      phone: 'string'
     }
+  } */
+  try {
+    const { fullName, email, password, phone } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ message: 'User already exists' });
+
+    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=2a7cf6&color=ffffff&size=256`;
+
+    const user = await User.create({ fullName, email, password, phone, avatarUrl });
+
+    const activationToken = generateActivationToken(user);
+    const activationLink = `${req.protocol}://${req.get('host')}/api/auth/verify/${activationToken}`;
+
+    await sendEmail(
+      user.email,
+      'Verify Your Account',
+      activationEmail(user.fullName, activationLink)
+    );
+
+    res.status(201).json({
+      message: 'Registration successful. Please check your email to verify your account.',
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const verifyEmail = async (req, res, next) => {
-    try {
-        const { token } = req.params;
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  // #swagger.tags = ['Auth']
+  try {
+    const { token } = req.params;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        const user = await User.findById(decoded.id);
-        if (!user) return res.status(404).json({ message: 'User not found' });
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-        if (user.isVerified) return res.json({ message: 'User already verified' });
+    if (user.isVerified) return res.json({ message: 'User already verified' });
 
-        user.isVerified = true;
-        await user.save();
+    user.isVerified = true;
+    await user.save();
 
-        res.json({ message: 'Email verified successfully' });
-    } catch (err) {
-        next(err);
-    }
+    res.json({ message: 'Email verified successfully' });
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const loginUser = async (req, res, next) => {
-    try {
-        const { email, password } = req.body;
-
-        // 1) Find user and pull in the password field so we can compare:
-        const user = await User.findOne({ email }).select('+password');
-        if (!user) {
-            return res.status(401).json({ message: 'Invalid email or password' });
-        }
-
-        // 2) Compare passwords:
-        const isMatch = await user.matchPassword(password);
-        if (!isMatch) {
-            return res.status(401).json({ message: 'Invalid email or password' });
-        }
-
-        // 3) Make sure the user has already verified their email/activation link:
-        if (!user.isVerified) {
-            return res.status(403).json({
-                message: 'Please verify your email before logging in.',
-            });
-        }
-
-        // ────> Now generate a 6-digit numeric OTP (as a string):
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-        // Store OTP on the user document, set expiry to e.g. 10 minutes from now:
-        user.otpCode = otp;
-        user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-        await user.save();
-
-        // Email the OTP to the user:
-        const subject = 'Your login OTP';
-        const html = otpEmailTemplate(user.fullName, otp);
-        await sendEmail(user.email, subject, html);
-
-        // Finally, respond to the client letting them know to check their email:
-        return res.status(200).json({
-            message: 'OTP sent to your email address. Please enter it to complete login.'
-        });
-
-    } catch (err) {
-        next(err);
+  // #swagger.tags = ['Auth']
+  /* #swagger.parameters['body'] = {
+    in: 'body',
+    description: 'User login data',
+    schema: 
+    {
+      email: 'string',
+      password: 'string'
     }
+  } */
+  try {
+    const { email, password } = req.body;
+
+    // 1) Find user and pull in the password field so we can compare:
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // 2) Compare passwords:
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // 3) Make sure the user has already verified their email/activation link:
+    if (!user.isVerified) {
+      return res.status(403).json({
+        message: 'Please verify your email before logging in.',
+      });
+    }
+
+    // ────> Now generate a 6-digit numeric OTP (as a string):
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store OTP on the user document, set expiry to e.g. 10 minutes from now:
+    user.otpCode = otp;
+    user.otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
+
+    // Email the OTP to the user:
+    const subject = 'Your login OTP';
+    const html = otpEmailTemplate(user.fullName, otp);
+    await sendEmail(user.email, subject, html);
+
+    // Finally, respond to the client letting them know to check their email:
+    return res.status(200).json({
+      message: 'OTP sent to your email address. Please enter it to complete login.'
+    });
+
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const verifyLoginOtp = async (req, res, next) => {
+  // #swagger.tags = ['Auth']
+  /* #swagger.parameters['body'] = {
+    in: 'body',
+    description: 'Verify login OTP',
+    schema: 
+    {
+      email: 'string',
+      otp: 'string'
+    }
+  } */
   try {
     const { email, otp } = req.body;
     if (!email || !otp) {
@@ -139,9 +172,9 @@ export const verifyLoginOtp = async (req, res, next) => {
     // 5) Generate a JWT and return it
     const token = generateToken(user._id);
     return res.status(200).json({
-      _id:       user._id,
-      fullName:  user.fullName,
-      email:     user.email,
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
       token, // this is your usual login token
     });
 
@@ -150,8 +183,16 @@ export const verifyLoginOtp = async (req, res, next) => {
   }
 };
 
-// ─── Forgot Password: generate a reset token and email it ─────────────────
 export const forgotPassword = async (req, res, next) => {
+  // #swagger.tags = ['Auth']
+  /* #swagger.parameters['body'] = {
+    in: 'body',
+    description: 'Forgot password request',
+    schema: 
+    {
+      email: 'string'
+    }
+  } */
   try {
     const { email } = req.body;
     if (!email) {
@@ -184,8 +225,16 @@ export const forgotPassword = async (req, res, next) => {
   }
 };
 
-// ─── Reset Password: verify token and set new password ──────────────────────
 export const resetPassword = async (req, res, next) => {
+  // #swagger.tags = ['Auth']
+  /* #swagger.parameters['body'] = {
+    in: 'body',
+    description: 'Reset password data',
+    schema: 
+    {
+      newPassword: 'string'
+    }
+  } */
   try {
     const { token } = req.params;
     const { newPassword } = req.body;

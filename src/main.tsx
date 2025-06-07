@@ -12,11 +12,18 @@ import '@fontsource/inter/900.css';
 import './index.css'
 import App from './App.tsx'
 import MobileGate from './wrapper/MobileGate.tsx';
+import { Provider } from 'react-redux';
+import { PersistGate } from 'redux-persist/integration/react';
+import { persistor, store } from './app/store.ts';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MobileGate>
-      <App />
+      <Provider store={store}>
+        <PersistGate loading={null} persistor={persistor}>
+          <App />
+        </PersistGate>
+      </Provider>
     </MobileGate>
   </StrictMode>,
 )

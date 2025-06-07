@@ -31,7 +31,7 @@ export const registerUser = async (req, res, next) => {
     const user = await User.create({ fullName, email, password, phone, avatarUrl });
 
     const activationToken = generateActivationToken(user);
-    const activationLink = `${req.protocol}://${req.get('host')}/api/auth/verify/${activationToken}`;
+    const activationLink = `${process.env.CLIENT_URL}/verify/${activationToken}`;
 
     await sendEmail(
       user.email,
@@ -50,10 +50,8 @@ export const registerUser = async (req, res, next) => {
 export const verifyEmail = async (req, res, next) => {
   // #swagger.tags = ['Auth']
   try {
-    const { token } = req.params;
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(req.user.id);
 
-    const user = await User.findById(decoded.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     if (user.isVerified) return res.json({ message: 'User already verified' });
@@ -172,9 +170,6 @@ export const verifyLoginOtp = async (req, res, next) => {
     // 5) Generate a JWT and return it
     const token = generateToken(user._id);
     return res.status(200).json({
-      _id: user._id,
-      fullName: user.fullName,
-      email: user.email,
       token, // this is your usual login token
     });
 
@@ -210,7 +205,7 @@ export const forgotPassword = async (req, res, next) => {
     const resetToken = generateResetToken(user);
 
     // 3) Build a reset URL and email it
-    const resetLink = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
+    const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
     const html = resetPasswordEmailTemplate(user.fullName, resetLink);
 
     await sendEmail(user.email, 'Reset Your Password', html);
@@ -230,38 +225,24 @@ export const resetPassword = async (req, res, next) => {
   /* #swagger.parameters['body'] = {
     in: 'body',
     description: 'Reset password data',
-    schema: 
-    {
+    schema: {
       newPassword: 'string'
     }
   } */
   try {
-    const { token } = req.params;
     const { newPassword } = req.body;
 
     if (!newPassword) {
       return res.status(400).json({ message: 'Please provide a new password.' });
     }
 
-    // 1) Verify the JWT
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (verifyErr) {
-      return res.status(400).json({ message: 'Invalid or expired reset token.' });
-    }
-
-    // 2) Find the user by the ID inside the token payload
-    const user = await User.findById(decoded.id).select('+password');
+    const user = await User.findById(req.user.id).select('+password');
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    // 3) Update the password (the bcrypt pre‐save hook will hash it)
     user.password = newPassword;
     await user.save();
-
-    // 4) (Optional) You could email a confirmation that password was changed
 
     return res.status(200).json({ message: 'Password has been reset successfully.' });
   } catch (err) {
